@@ -9,6 +9,7 @@ import (
 	"github.com/apolloconfig/agollo/v4/constant"
 	apolloconfig "github.com/apolloconfig/agollo/v4/env/config"
 	"github.com/apolloconfig/agollo/v4/extension"
+	"github.com/gogf/gf/v2/container/gmap"
 	"github.com/gogf/gf/v2/encoding/gjson"
 	"github.com/gogf/gf/v2/frame/g"
 )
@@ -17,9 +18,11 @@ import (
 var defaultNamespace string
 
 type ApolloAdapter struct {
-	Client agollo.Client
-	Cache  agcache.CacheInterface
-	Config *apolloconfig.AppConfig
+	Client  agollo.Client
+	Cache   agcache.CacheInterface
+	Config  *apolloconfig.AppConfig
+	jsonMap *gmap.StrAnyMap // The pared JSON objects for configuration files.
+
 }
 
 type ApolloArg struct {
@@ -70,9 +73,10 @@ func NewAdapter(c *apolloconfig.AppConfig) *ApolloAdapter {
 	}
 	cache := client.GetConfigCache(c.NamespaceName)
 	return &ApolloAdapter{
-		Client: client,
-		Config: c,
-		Cache:  cache,
+		Client:  client,
+		Config:  c,
+		Cache:   cache,
+		jsonMap: gmap.NewStrAnyMap(),
 	}
 }
 
@@ -90,15 +94,23 @@ func (a *ApolloAdapter) Available(ctx context.Context, resource string) (ok bool
 // "x.y.z" for map item.
 // "x.0.y" for slice item.
 func (a *ApolloAdapter) Get(ctx context.Context, pattern string) (value interface{}, err error) {
-	m, err := a.Data(ctx)
-	if err != nil {
-		return nil, err
+	result := a.jsonMap.GetOrSetFuncLock(a.Config.NamespaceName, func() interface{} {
+		m, err := a.Data(ctx)
+		if err != nil {
+			return nil
+		}
+		v, err := gjson.LoadJson(m)
+		if err != nil {
+			return nil
+		}
+		return v
+	})
+
+	if result != nil {
+		v := result.(*gjson.Json)
+		return v.Get(pattern).Val(), nil
 	}
-	v, err := gjson.LoadJson(m)
-	if err != nil {
-		return nil, err
-	}
-	return v.Get(pattern).Val(), nil
+	return nil, fmt.Errorf("fail to get %s", pattern)
 }
 
 // Data retrieves and returns all configuration data in current resource as map.
