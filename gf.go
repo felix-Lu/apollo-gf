@@ -85,7 +85,7 @@ func NewAdapter(c *apolloconfig.AppConfig) *ApolloAdapter {
 //
 // Note that this function does not return error as it just does simply check for
 // backend configuration service.
-func (a *ApolloAdapter) Available(ctx context.Context, resource string) (ok bool) {
+func (a *ApolloAdapter) Available(ctx context.Context, resource ...string) (ok bool) {
 	return true
 }
 
